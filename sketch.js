@@ -11,7 +11,7 @@ let currentPlayer = BLACK; // 現在のプレイヤー（黒から始まる）
 let gameOver = false;     // ゲーム終了フラグ
 
 // CPU対戦設定
-let gameMode = 'pvp';      // ゲームモード ('pvp': 人vs人, 'pvc': 人vsCPU)
+let gameMode = 'pvc';      // ゲームモード（固定：人vsCPU）
 let cpuLevel = 'normal';   // CPU難易度 ('easy': 簡単, 'normal': 普通, 'hard': 難しい)
 let cpuPlayer = WHITE;     // CPUが操作するプレイヤー（白）
 let isThinking = false;    // CPU思考中フラグ
@@ -352,14 +352,6 @@ function updateGameInfo() {
  * ゲームをリセットする（HTMLのボタンから呼ばれる）
  */
 function resetGame() {
-  initializeGame();
-}
-
-/**
- * ゲームモードを設定する（HTMLから呼ばれる）
- */
-function setGameMode(mode) {
-  gameMode = mode;
   initializeGame();
 }
 
