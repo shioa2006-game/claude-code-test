@@ -40,13 +40,63 @@
         button:hover {
             background-color: #45a049;
         }
+        .controls {
+            margin: 15px 0;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .control-group label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+        }
+        select {
+            padding: 8px 12px;
+            font-size: 14px;
+            border: 2px solid #4CAF50;
+            border-radius: 5px;
+            background-color: white;
+            cursor: pointer;
+        }
+        select:focus {
+            outline: none;
+            border-color: #45a049;
+        }
     </style>
 </head>
 <body>
     <h1>オセロゲーム</h1>
     <div id="gameInfo"></div>
     <div id="score"></div>
-    <button onclick="resetGame()">ゲームをリセット</button>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="gameMode">ゲームモード:</label>
+            <select id="gameMode" onchange="setGameMode(this.value)">
+                <option value="pvp">人 vs 人</option>
+                <option value="pvc">人 vs CPU</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label for="cpuLevel">CPU難易度:</label>
+            <select id="cpuLevel" onchange="setCpuLevel(this.value)">
+                <option value="easy">簡単</option>
+                <option value="normal" selected>普通</option>
+                <option value="hard">難しい</option>
+            </select>
+        </div>
+
+        <button onclick="resetGame()">ゲームをリセット</button>
+    </div>
 
     <!-- p5.jsライブラリの読み込み -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>

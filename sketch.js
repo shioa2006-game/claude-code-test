@@ -10,6 +10,12 @@ let board = [];           // ボードの状態を保持する2次元配列
 let currentPlayer = BLACK; // 現在のプレイヤー（黒から始まる）
 let gameOver = false;     // ゲーム終了フラグ
 
+// CPU対戦設定
+let gameMode = 'pvp';      // ゲームモード ('pvp': 人vs人, 'pvc': 人vsCPU)
+let cpuLevel = 'normal';   // CPU難易度 ('easy': 簡単, 'normal': 普通, 'hard': 難しい)
+let cpuPlayer = WHITE;     // CPUが操作するプレイヤー（白）
+let isThinking = false;    // CPU思考中フラグ
+
 // 8方向のベクトル（上、下、左、右、斜め4方向）
 const directions = [
   [-1, -1], [-1, 0], [-1, 1],
@@ -44,6 +50,9 @@ function draw() {
 
   // ゲーム情報を更新
   updateGameInfo();
+
+  // CPUのターンを実行
+  executeCpuTurn();
 }
 
 /**
@@ -69,6 +78,7 @@ function initializeGame() {
   // ゲーム状態をリセット
   currentPlayer = BLACK;
   gameOver = false;
+  isThinking = false;
 }
 
 /**
@@ -124,6 +134,9 @@ function drawPieces() {
 function highlightValidMoves() {
   if (gameOver) return;
 
+  // CPU対戦モードでCPUのターンの場合はハイライトしない
+  if (gameMode === 'pvc' && currentPlayer === cpuPlayer) return;
+
   for (let row = 0; row < BOARD_SIZE; row++) {
     for (let col = 0; col < BOARD_SIZE; col++) {
       if (isValidMove(row, col, currentPlayer)) {
@@ -144,6 +157,12 @@ function highlightValidMoves() {
  */
 function mousePressed() {
   if (gameOver) return;
+
+  // CPU対戦モードでCPUのターンの場合はクリックを無視
+  if (gameMode === 'pvc' && currentPlayer === cpuPlayer) return;
+
+  // CPUが思考中の場合はクリックを無視
+  if (isThinking) return;
 
   // クリックされたセルの位置を計算
   const col = floor(mouseX / CELL_SIZE);
@@ -305,15 +324,27 @@ function updateGameInfo() {
   // ゲーム状態表示
   if (gameOver) {
     if (counts.black > counts.white) {
-      gameInfoElement.innerHTML = '🎉 黒の勝ち！';
+      gameInfoElement.innerHTML = '黒の勝ち！';
     } else if (counts.white > counts.black) {
-      gameInfoElement.innerHTML = '🎉 白の勝ち！';
+      gameInfoElement.innerHTML = '白の勝ち！';
     } else {
       gameInfoElement.innerHTML = '引き分け！';
     }
   } else {
     const playerName = currentPlayer === BLACK ? '黒' : '白';
-    gameInfoElement.innerHTML = `現在のターン: ${playerName}`;
+
+    // CPU対戦モードでCPUのターンの場合
+    if (gameMode === 'pvc' && currentPlayer === cpuPlayer) {
+      if (isThinking) {
+        gameInfoElement.innerHTML = `CPUが思考中... (${playerName})`;
+      } else {
+        gameInfoElement.innerHTML = `CPUのターン (${playerName})`;
+      }
+    } else if (gameMode === 'pvc') {
+      gameInfoElement.innerHTML = `あなたのターン (${playerName})`;
+    } else {
+      gameInfoElement.innerHTML = `現在のターン: ${playerName}`;
+    }
   }
 }
 
@@ -322,4 +353,205 @@ function updateGameInfo() {
  */
 function resetGame() {
   initializeGame();
+}
+
+/**
+ * ゲームモードを設定する（HTMLから呼ばれる）
+ */
+function setGameMode(mode) {
+  gameMode = mode;
+  initializeGame();
+}
+
+/**
+ * CPU難易度を設定する（HTMLから呼ばれる）
+ */
+function setCpuLevel(level) {
+  cpuLevel = level;
+}
+
+/**
+ * すべての有効な手を取得する
+ */
+function getValidMoves(player) {
+  const moves = [];
+  for (let row = 0; row < BOARD_SIZE; row++) {
+    for (let col = 0; col < BOARD_SIZE; col++) {
+      if (isValidMove(row, col, player)) {
+        moves.push({ row, col });
+      }
+    }
+  }
+  return moves;
+}
+
+/**
+ * 指定位置に石を置いた場合に裏返せる石の数を数える
+ */
+function countFlips(row, col, player) {
+  let count = 0;
+  for (let dir of directions) {
+    if (canFlipInDirection(row, col, dir[0], dir[1], player)) {
+      count += countFlipsInDirection(row, col, dir[0], dir[1], player);
+    }
+  }
+  return count;
+}
+
+/**
+ * 指定方向で裏返せる石の数を数える
+ */
+function countFlipsInDirection(row, col, dRow, dCol, player) {
+  const opponent = player === BLACK ? WHITE : BLACK;
+  let r = row + dRow;
+  let c = col + dCol;
+  let count = 0;
+
+  while (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE) {
+    if (board[r][c] === EMPTY) {
+      return 0;
+    }
+    if (board[r][c] === opponent) {
+      count++;
+    } else if (board[r][c] === player) {
+      return count;
+    }
+    r += dRow;
+    c += dCol;
+  }
+  return 0;
+}
+
+/**
+ * ボード上の位置の評価値を返す
+ * 角は最も価値が高く、角の隣は価値が低い
+ */
+function getPositionValue(row, col) {
+  // 位置評価テーブル（オセロの定石）
+  const positionValues = [
+    [100, -20,  10,   5,   5,  10, -20, 100],
+    [-20, -50,  -2,  -2,  -2,  -2, -50, -20],
+    [ 10,  -2,   5,   1,   1,   5,  -2,  10],
+    [  5,  -2,   1,   0,   0,   1,  -2,   5],
+    [  5,  -2,   1,   0,   0,   1,  -2,   5],
+    [ 10,  -2,   5,   1,   1,   5,  -2,  10],
+    [-20, -50,  -2,  -2,  -2,  -2, -50, -20],
+    [100, -20,  10,   5,   5,  10, -20, 100]
+  ];
+  return positionValues[row][col];
+}
+
+/**
+ * CPU思考：簡単レベル（ランダム）
+ */
+function cpuThinkEasy(player) {
+  const moves = getValidMoves(player);
+  if (moves.length === 0) return null;
+
+  // ランダムに選択
+  const randomIndex = floor(random(moves.length));
+  return moves[randomIndex];
+}
+
+/**
+ * CPU思考：普通レベル（多く取れる手を優先）
+ */
+function cpuThinkNormal(player) {
+  const moves = getValidMoves(player);
+  if (moves.length === 0) return null;
+
+  let bestMove = null;
+  let maxFlips = -1;
+
+  for (let move of moves) {
+    const flips = countFlips(move.row, move.col, player);
+
+    // 角は特に優先
+    if (getPositionValue(move.row, move.col) >= 100) {
+      return move;
+    }
+
+    if (flips > maxFlips) {
+      maxFlips = flips;
+      bestMove = move;
+    }
+  }
+
+  return bestMove;
+}
+
+/**
+ * CPU思考：難しいレベル（位置評価と取得数を考慮）
+ */
+function cpuThinkHard(player) {
+  const moves = getValidMoves(player);
+  if (moves.length === 0) return null;
+
+  let bestMove = null;
+  let maxScore = -Infinity;
+
+  for (let move of moves) {
+    const flips = countFlips(move.row, move.col, player);
+    const posValue = getPositionValue(move.row, move.col);
+
+    // スコア = 位置評価値 + 取得石数 * 2
+    const score = posValue + flips * 2;
+
+    if (score > maxScore) {
+      maxScore = score;
+      bestMove = move;
+    }
+  }
+
+  return bestMove;
+}
+
+/**
+ * CPUの手を決定する
+ */
+function decideCpuMove() {
+  if (cpuLevel === 'easy') {
+    return cpuThinkEasy(cpuPlayer);
+  } else if (cpuLevel === 'normal') {
+    return cpuThinkNormal(cpuPlayer);
+  } else if (cpuLevel === 'hard') {
+    return cpuThinkHard(cpuPlayer);
+  }
+  return null;
+}
+
+/**
+ * CPUのターンを実行する
+ */
+function executeCpuTurn() {
+  if (isThinking || gameOver) return;
+  if (gameMode !== 'pvc') return;
+  if (currentPlayer !== cpuPlayer) return;
+
+  isThinking = true;
+
+  // 少し遅延させて考えている感を出す
+  setTimeout(() => {
+    const move = decideCpuMove();
+
+    if (move) {
+      // 石を置く
+      placePiece(move.row, move.col, cpuPlayer);
+
+      // ターンを交代
+      switchPlayer();
+
+      // 次のプレイヤーが置ける場所がない場合
+      if (!hasValidMoves(currentPlayer)) {
+        switchPlayer();
+
+        // 両プレイヤーとも置けない場合はゲーム終了
+        if (!hasValidMoves(currentPlayer)) {
+          gameOver = true;
+        }
+      }
+    }
+
+    isThinking = false;
+  }, 500); // 0.5秒の遅延
 }
